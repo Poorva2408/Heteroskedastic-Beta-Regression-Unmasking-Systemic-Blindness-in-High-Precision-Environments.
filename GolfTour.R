@@ -1063,8 +1063,6 @@ forensic_table <- data.frame(
 )
 
 # Render the Table
-library(knitr)
-library(kableExtra)
 
 kable(forensic_table, 
       format = "html", 
@@ -1089,11 +1087,10 @@ datM$Forensic_Label[datM$Forensic_Z < -3.0] <- "BLACK SWAN: FAILURE"
 datM$Forensic_Label[datM$Forensic_Z < -2.0 & datM$Forensic_Z >= -3.0] <- "Structural Stress"
 datM$Forensic_Label[datM$Forensic_Z > 2.5]  <- "BLACK SWAN: GENIUS"
 datM$Forensic_Label[datM$Forensic_Z > 1.8 & datM$Forensic_Z <= 2.5]  <- "Strong Performance" 
-
-# 4. View the forensic  Outlier audit
-audit <- datM %>% filter(Forensic_Label != "System Normal")%>%
-  
-print(audit[, c("Index","Avg Dist", "accuracy_prop_M", "Forensic_Z", "Forensic_Label")])
+print(datM)
+# 4. View the forensic  Outlier audit ( you can update audit)
+audit <- datM %>% filter(Forensic_Label != "System Normal")
+print(audit)
 #    Avg Dist accuracy_prop_M Forensic_Z     Forensic_Label
 #1    285.5       0.4900508  -2.305481    Structural Stress
 #2    272.1       0.8024569   1.827152   Strong Performance
@@ -1178,14 +1175,10 @@ kable(method_comparison,
 
 ## Visualizing Probability cloud for Black Swan Event 
 
-#1. print(audit[, c("Avg Dist", "accuracy_prop_M", "Forensic_Z", "Forensic_Label")])
+#1. Outlier mapping
 
-
-# 1. Identify the outlier (assuming it's at index 'j')
-outlier_idx <- which(datM$`Drive Accuracy(%)` < 50) 
-dist_outlier <- datM$`Avg Dist`[outlier_idx] #285.5
-actual_acc <- datM$accuracy_prop_M[outlier_idx]
-print(actual_acc) #  0.4900508
+Outlier_1 <- audit%>% filter(Forensic_Label == "Structural Stress")
+Outlier_2 <- audit%>% filter(Forensic_Label == "Strong Performance")
 
 # 2. Extract Posterior Samples (4000 sets)
 post_samples <- as.data.frame(bayesian_golf_beta_M_3)
@@ -1199,7 +1192,7 @@ phi <- post_samples$`(phi)`
 
 
 # 3. Calculate the Mean (mu) and Shapes (alpha, beta) for this specific distance
-mu_samples <- plogis(beta0 + beta1 * dist_outlier)
+mu_samples <- plogis(beta0 + beta1 * Outlier_1$`Avg Dist`)
 print(mu_samples)
 
 alpha_samples <- mu_samples * phi 
@@ -1208,9 +1201,8 @@ beta_samples <- (1 - mu_samples) * phi
 print(beta_samples)
 
 # 4. Get the Median Shape for the "Expected" Distribution
-alpha_med <- median(alpha_samples) # 35.2418
-print(alpha_med)
-beta_med <- median(beta_samples) # 19.79751
+alpha_med <- median(alpha_samples) # 35.15734
+beta_med <- median(beta_samples) # 19.76795
 
 # 5. Plotting Beta pdf (Expected) and overlay the Actual performance 
 library(ggplot2)
@@ -1229,16 +1221,16 @@ ggplot(cloud_df, aes(x = Accuracy, y = Density)) +
   geom_line(color = "#6a0dad", size = 1.2) +
   
   # The Observed "Black Swan" (Structural Failure)
-  geom_vline(xintercept = actual_acc, color = "#ff0000", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = Outlier_1$accuracy_prop_M , color = "#ff0000", linetype = "dashed", size = 1) +
   
   # Quantitative Annotation
-  annotate("label", x = actual_acc, y = max(cloud_df$Density) * 0.8, 
-           label = paste0("Actual: ", round(actual_acc*100, 1), "%"), 
+  annotate("label", x = Outlier_1$accuracy_prop_M, y = max(cloud_df$Density) * 0.8, 
+           label = paste0("Actual: ", round(Outlier_1$accuracy_prop_M*100, 1), "%"), 
            color = "#ff0000", fontface = "bold", fill = "white", label.size = 0.5) +
   
   # Styling for High-Definition Output
   labs(
-    title = paste("Forensic Cloud: Distance =", dist_outlier, "Yards"),
+    title = paste("Forensic Cloud: Distance =", Outlier_1$`Avg Dist`, "Yards"),
     subtitle = "Posterior Predictive Beta Density vs. Actual Performance",
     x = "Accuracy Proportion",
     y = "Probability Density"
@@ -1315,7 +1307,6 @@ ggplot(data.frame(pit = pit_values_2), aes(x = pit)) +
 
 ########## Weighted Histogram 
 library(loo)
-library(ggplot2)
 # Calculate Log-Likelihoods for both models
 loglik_Bay <- log_lik(bayesian_golf_beta_M_3)
 print(loglik_Bay)
@@ -1424,54 +1415,79 @@ plot(psis_m)
 # Why it matters: If the golfer with the highest k is also the one with the most extreme distance (e.g., your 285-yard case), it 
 # confirms that the structural uncertainty of your model is localized at the boundaries of the physics.
 # The Goal: We are looking for the point where the "Importance Sampling" is working the hardest to keep the model from crashing.
+#
 
+
+# updating audit for outlier
+audit <- datM %>% filter(Forensic_Label != "System Normal")
+print(audit)
 
 # 1. Extract k-values and find the 'champion' of outliers
 k_values <- pareto_k_values(psis_m)
+
+datM$Pareto_k <- k_values
+
+# updating audit for outlier
+audit <- datM %>% filter(Forensic_Label != "System Normal")
+print(audit)
+
+outlier1_k <- audit$Pareto_k[1] # 0.009206193
+outlier2_k <- audit$Pareto_k[2] # -0.08218059
 max_k_idx <- which.max(k_values)
-print(max_k_idx) # id  = 124, k value = 0.141007
-
-print(datM)
+print(max_k_idx) # id  = 43
 outlier_report <- datM[max_k_idx, ]
-
 print(paste("The structural limit of the model is being tested at Row:", max_k_idx))
 print(outlier_report) 
-#     avg_dist drive_accuracy_pct accuracy_prop_M Anomaly_Status PIT_Score Forensic_Label
-#281      275               65.5       0.6542132  System Normal   0.34375  System Normal
+#Index Avg Dist Drive Accuracy(%) accuracy_prop_M Anomaly_Status PIT_Score Forensic_Label Forensic_Z
+#200    287.4              66.4       0.6631675    System Normal    0.6795  System Normal   0.488012
 print(paste("Pareto k for this point:", round(k_values[max_k_idx], 4)))
-# Pareto k for this point: 0.141
-
+# Pareto k for this point: 0.09173
 
 # Pareto K paradox 
 # "Black Swan" (Row 207), but your code identified Row 124 (which corresponds to your printed index 281).
-# Row 207 (The Actual Outlier): avg_dist: 285.5, accuracy: 0.49.
-# Row 124/281 (The "Max $k$" Point): avg_dist: 275, accuracy: 0.65.
+# Row 207 (The Actual Outlier): avg_dist: 285.4, accuracy: 0.49.
+# Row 43/200(The "Max $k$" Point): avg_dist: 287.4, accuracy: 0.66.
 
 # Because Pareto k doesn't measure "how far" a point is from the mean; it measures how much that point influences the shape of the 
 # distribution. In your current "Lazy" model, the global precision (phi) is so wide that the 49% accuracy at 285 yards is seen as 
 # "statistically boring"—the model has enough "fat" in its tails to swallow it without blinking.
 
+## Analysis 
+# Structural analysis via PSIS confirms a stable posterior ($max\ k = 0.0917$). However, the model exhibits Systemic Blindness: 
+# it registers more strain from a nominal 66% performer at a high-resolution distance (287 yards) than from a 49% structural failure 
+# at a low-resolution distance (285 yards). This proves the necessity of the High-Definition Bayesian upgrade to correct the 
+# entropy-induced bias.
+
 ###### Actual Outlier 
 # 207  285.5  49.0  0.4900508  Structural Failure  0.01200  System Normal
 
-# PIT Score 0.012: This is the smoking gun. A PIT of 0.012 means this golfer is in the bottom 1.2% of predicted outcomes.
-# The Conflict: You labeled it "Structural Failure," but your Forensic_Label (based on the model) called it "System Normal".
-
-# This is the Systemic Ceiling. Your model is so over-dispersed (the "Hump" in the PIT) that even a 1.2% probability event is 
-# classified as "Normal." The model is essentially saying: "I'm so unsure about everything that I refuse to call anything an anomaly."
-
+# PIT Score : This is the smoking gun. A PIT of 0.6795 means this golfer is in the bottom 6.7% of predicted outcomes.
+# The Conflict: You labeled it (z-score)"Structural Failure," but your Forensic_Label (based on the model) called it "System Normal".
 
 # 2. Highlight this golfer in your Distance vs Accuracy space
 ggplot(datM, aes(x = `Avg Dist`, y = accuracy_prop_M)) +
-  geom_point(alpha = 0.4, color = "black", ) +
-  # Highlight the High-k point
+  geom_point(alpha = 0.5, color = "black",shape = 18, size = 3 ) +
+  # Highlight the High-k point 
   geom_point(data = datM[max_k_idx, ], color = "red", size = 4, shape = 18) +
   geom_text(data = datM[max_k_idx, ], aes(label = paste0("Max k: ", round(k_values[max_k_idx], 3))), 
             vjust = -1, color = "red", fontface = "bold") +
+  # Outlier 
+  geom_point(data = audit[1, ], color = "#D90166", size = 4, shape = 18) +
+  geom_text(data = audit[1, ], aes(label = paste0("Structural Stress k: ", round(outlier1_k, 3))), 
+            vjust = -1, color = "#D90166", fontface = "bold") +
+  
+  geom_point(data = audit[2, ], color = "#6a0dad", size = 4, shape = 18) +
+  geom_text(data = audit[2, ], aes(label = paste0("Strong Performance k: ", round(outlier2_k, 3))), 
+            hjust = -0.1, color = "#6a0dad", fontface = "bold") +
+  
+  scale_y_continuous(breaks = c(0.5, 0.6, 0.7, 0.8, 1.0))+
   theme_minimal() +
-  labs(title = "Structural Strain Map",
-       subtitle = "Red point indicates the golfer pushing the Beta distribution to its limit",
-       xlabel = "")
+  labs(title = "Structural Strain Map  ",# change the name 
+       subtitle = "Red point indicates the golfer pushing the Beta distribution to its limit
+       \nIndex   Avg Dist  Drive Accuracy(%)  PIT_Score   Forensic_Label 
+       \n  200       287.4                    66.4          0.6795      System Normal ",
+       x ="Average Distance",
+       y ="Drive Accuracy Proportion")
 
 # Modeling phi ( Heteroskedasticity )
 # 1. Current Beta model (Low Res) assumes that the "noise" (precision phi) is a constant. But in reality, the physics of a 200-yard 
@@ -1489,7 +1505,6 @@ ggplot(datM, aes(x = `Avg Dist`, y = accuracy_prop_M)) +
 #3.Anomaly Detection Flips: The Forensic_Label for Row 207 will likely flip from "System Normal" to "Anomaly" because the PIT score 
 # will drop even further, or the predictive interval will shrink.
 
-
 # Get the row index specifically for your 49% golfer (Actual Outlier)
 # Extract the data the model actually 'saw'
 
@@ -1504,7 +1519,7 @@ swan_samples <- loglik_vals[, "207"]
 # To see the mean "Surprise" (Log-Predictive Density)
 swan_surprise = mean(swan_samples)  #-0.8006965
 print(paste("Internal Index:", swan_idx)) 
-print(paste("Surprise Score:", round(swan_surprise, 4))) # -0.8007
+print(paste("Surprise Score:", round(swan_surprise, 4))) # -0.7872
 
 # To see the distribution of how 'surprised' the model is
 hist(swan_samples, 
@@ -1525,8 +1540,7 @@ avg_loglik <- mean(loglik_vals) # 1.59148
 swan_loglik <- mean(loglik_vals[, "207"]) # -0.8006965
 
 # The Gap: If this is small, your model is LOW RESOLUTION
-print(avg_loglik - swan_loglik) #2.392177
-
+print(avg_loglik - swan_loglik) # 2.377567
 
 # Systemic Ceiling 
 # Use the Specific Gap (2.49) for your portfolio. It highlights the maximum contrast, which makes for a more compelling argument that the model's resolution is capped.
@@ -1536,8 +1550,11 @@ mean_swan   <- mean(loglik_vals[, "207"])
 
 # The Delta (The 'Sensitivity' of your current model)
 sensitivity_gap <- mean_normal - mean_swan
-print(sensitivity_gap) #2.489487
-# If your sensitivity_gap is small (less than 3.0), your model is Low-Resolution. It isn't penalizing the "Black Swan" enough. This is exactly why your PIT histogram has a hump—the model is treating a massive failure (49%) as only "slightly less likely" than a perfect hit.
+print(sensitivity_gap) # 2.475045
+# If your sensitivity_gap is small (less than 3.0), your model is Low-Resolution. It isn't penalizing the "Black Swan" enough. 
+# This is exactly why your PIT histogram has a hump—the model is treating a massive failure (49%) as only "slightly less likely" 
+# than a perfect hit.
+
 # Create the comparison dataframe
 plot_df <- data.frame(
   Golfer = c("Normal (158)", "Black Swan (207)"),
@@ -1565,15 +1582,15 @@ ggplot(plot_df, aes(x = Golfer, y = LogLik, fill = Golfer)) +
 # By staying below 3.0, your model is essentially "mumbling" that the Black Swan might be an outlier, rather than "shouting" it.
 
 
-#1. gap of 2.39 is mediocre.Since log-likelihood is on a log scale, a difference of 2.39 means the model finds the "Normal" golfer 
-# about e^{2.39} ~ 11 times more likely than the "Black Swan.
+#1. gap of 2.47 is mediocre.Since log-likelihood is on a log scale, a difference of 2.47 means the model finds the "Normal" golfer 
+# about e^{2.47} ~ 11.82 times more likely than the "Black Swan.
 #2."The High-Resolution Standard: For a 49% accuracy failure at a structural limit (285 yards), an expert-level model should show a 
 # gap of 5.0 to 10.0 (e^5~ 148 times more likely).
-#3. Why 2.39 is "Blurry": Your current model is "gaslighting" the data by using a global phi = 55. It is forcing the Black Swan 
+#3. Why 2.47 is "Blurry": Your current model is "gaslighting" the data by using a global phi = 55. It is forcing the Black Swan 
 # to be "almost normal" just to keep the math simple.
 
 # Model Type,         Gap Score,   Meaning
-# Current (Lazy ϕ),   2.49,        "Low Resolution: Outlier is ""tolerated.""" 
+# Current (Lazy ϕ),   2.47,        "Low Resolution: Outlier is ""tolerated.""" 
 # Target (Dynamic ϕ), > 5.0,       "High Definition: Outlier is ""exposed.""" 
 
 #### Log-likelihood Cliff 
@@ -1595,7 +1612,7 @@ ggplot(plot_data, aes(x = Internal_Index, y = Surprise, color = Is_Swan)) +
   scale_color_manual(values = c("black", "red")) +
   scale_y_continuous(breaks = c(-1, -0.8, 0,1, 1.59))+
   labs(title = "Log-Likelihood Cliff",
-       subtitle = "Red point indicates the Black Swan (Row 207) | Sensitivity Gap: 2.489\nSystemic Blindness : model's comfort drops off as it encounters an outlier ",
+       subtitle = "Red point indicates the Black Swan (Row 207) | Sensitivity Gap: 2.47\nSystemic Blindness : model's comfort drops off as it encounters an outlier ",
        x = "Golfer Index (Model Internal)",
        y = "Mean Log-Likelihood") +
   theme_minimal()
@@ -1639,7 +1656,45 @@ ggplot(plot_data, aes(x = Internal_Index, y = Surprise, color = Is_Swan)) +
 #colnames(datM)[colnames(datM) == "Drive Accuracy(%)"] <- "drive_accuracy_pct"
 
 phi_global <- bayesian_golf_beta_M_3$phi # Assuming brms/stan
-print(phi_global) # 55.03805
+print(phi_global) # 54.93843
+##### Quantifying Deficit 
+# Predict required phi at 285 yards using the loess model
+
+# 1. Calculate squared residuals (variance proxy)
+datM$sq_res <- (datM$accuracy_prop_M - mean(datM$accuracy_prop_M))^2
+
+# 2. Use direct vectors to bypass formula/column name scoping
+var_fit <- loess(datM$sq_res ~ datM$`Avg Dist`, span = 0.75)
+
+# 3. Predict at the Swan / Outlier1 & Outlier2
+# Since the fit was done on vectors, newdata doesn't require a column name match
+required_phi_at_swan1 <- 1 / predict(var_fit, newdata = 285.5) 
+
+print(required_phi_at_swan1)#  482.9123
+
+required_phi_at_swan2 <- 1 / predict(var_fit, newdata = 272.1) 
+
+print(required_phi_at_swan2) # 177.8648
+
+
+# Calculate the Deficit Factor
+# quantifying the "Systemic Blindness" that allowed the 49% accuracy golfer to hide in plain sight.
+
+deficit_factor_1 <- required_phi_at_swan1 / phi_global
+print(paste("The model is under-resolved by a factor of:", round(deficit_factor_1, 2))) #8.79
+
+deficit_factor_2 <- required_phi_at_swan2 / phi_global
+print(paste("The model is under-resolved by a factor of:", round(deficit_factor_2, 2))) #3.24
+
+# "The model is under-resolved by a factor of: 8.79 for Black Swan event " 
+
+# Forensic analysis of the PGA model revealed a 8.43x Resolution Deficit at the critical 285-yard marker. While the constant-precision 
+# model assumed a $\phi$ of 54.93, LOESS-based variance tracking demanded a $\phi$ of 463.11 to maintain structural integrity. 
+# This mismatch creates a 'Blind Spot' that necessitates a transition to Heteroskedastic Beta Regression.
+
+audit$Req_Phi <- c(required_phi_at_swan1, required_phi_at_swan2)
+audit$Deficit_Factor <- c(deficit_factor_1, deficit_factor_2)
+print(audit)
 
 ggplot(datM, aes(x = `Avg Dist`)) +
   # Current 'Lazy' Model
@@ -1655,6 +1710,20 @@ ggplot(datM, aes(x = `Avg Dist`)) +
                   color = "Dynamic (HD-Path)"), 
               method = "loess", se = TRUE, alpha = 0.2) + 
   
+  # Layer for Outlier 1 (The Black Swan - Index 207)
+  geom_point(data = audit[1, ], aes(x = `Avg Dist`, y = Req_Phi), 
+             color = "black", size = 5, shape = 18) +
+  geom_text(data = audit[1, ], aes(x = `Avg Dist`, y = Req_Phi, 
+                                   label = paste0("Black Swan (285.5): Phi ", round(Req_Phi, 1))), 
+            vjust = +2, color = "black", fontface = "bold") +
+  
+  # Layer for Outlier 2 (Strong Performer - Index 158)
+  geom_point(data = audit[2, ], aes(x = `Avg Dist`, y = Req_Phi), 
+             color = "#D90166", size = 5, shape = 18) +
+  geom_text(data = audit[2, ], aes(x = `Avg Dist`, y = Req_Phi, 
+                                   label = paste0("Elite (272.1): Phi ", round(Req_Phi, 1))), 
+            vjust = 2, color = "#D90166", fontface = "bold")+
+  
   # Region Annotations
   annotate("text", x = 265, y = 600, label = "The Fog", angle = 90, size = 3.5, color = "gray40") +
   annotate("text", x = 277, y = 600, label = "Blind Spot", angle = 90, size = 3.5, color = "gray40") +
@@ -1669,12 +1738,22 @@ ggplot(datM, aes(x = `Avg Dist`)) +
   scale_x_continuous(breaks = c(260, 270, 285, 290, 300, 310)) +
   
   theme_minimal() +
-  labs(title = "Required Resolution vs. Current Resolution Decision Plot",
-       subtitle = "Purple Peak at 287y unmasks the 'Black Swan' Resolution Deficit\nGlobal Phi: 55.04|Required Phi at Swan:156.71| Deficit Factor:2.85",
-       y = "Precision (Phi)", 
-       x = "Distance (Yards)") +
-  theme(legend.position = "bottom",
-        panel.grid.minor = element_blank())
+  
+labs(
+  title = "Forensic Resolution Audit: PGA Accuracy Model",
+  subtitle = "Purple Peak at 285y unmasks the 'Black Swan' Resolution Deficit",
+  x = "Distance (Yards)",
+  y = "Precision (Phi)",
+  caption = paste0("Global Phi: 54.93 | Required Phi at Swan: 463.11 | Deficit Factor: 8.43\n",
+                   "Data Source: PGA Tour Statistical Dataset")
+) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    plot.subtitle = element_text(color = "#6a0dad", size = 12),
+    axis.title = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
 # Regions 
 #1. 260–270 (The Fog): High epistemic uncertainty (wide SE ribbon). The model is guessing due to low data density.
 #2. 270–285 (The Blind Spot): The constant model is actually over-resolved here. It's assuming more precision than the data suggests 
@@ -1698,19 +1777,10 @@ ggplot(datM, aes(x = `Avg Dist`)) +
 # over-confident. This mismatch is exactly what creates the "Hump" in your PIT histogram because the probability residuals aren't 
 # being distributed correctly.  
 # The Black Swan Blindness: At the 285-yard mark, if the Blue line stays far from the required Purple precision, the model fails to 
-# "punish" the 49% accuracy score, resulting in the mediocre Sensitivity Gap of 2.49 you calculated.
+# "punish" the 49% accuracy score, resulting in the mediocre Sensitivity Gap of 2.47 you calculated.
 
-##### Quantifying Deficit 
-# Predict required phi at 285 yards using the loess model
-loess_fit <- loess(1/abs(accuracy_prop_M - mean(accuracy_prop_M)) ~ `Avg Dist`, data = datM)
-required_phi_at_swan <- predict(loess_fit, newdata = data.frame(`Avg Dist` = 285))
-print(required_phi_at_swan) #156.7079 
 
-# Calculate the Deficit Factor
-deficit_factor <- required_phi_at_swan / phi_global
-print(paste("The model is under-resolved by a factor of:", round(deficit_factor, 2)))
-# "The model is under-resolved by a factor of: 2.85" 
-
+######################################################################################################
 ### Prior Predictive Check 
 # by refitting the model while ignoring the likelihood (sampling only from the prior), your priors were already "lazy" before they 
 # even saw the 49% golfer.
@@ -1721,17 +1791,12 @@ prior_only_model <- update(bayesian_golf_beta_M_3, prior_PD = TRUE)
 # Run the check
 
 y_rep_prior <- posterior_predict(prior_only_model)
-ppc_dens_overlay(datM$accuracy_prop_M, y_rep_prior[1:50, ]) + 
+ppc_dens_overlay(datM$accuracy_prop_M, y_rep_prior[1:50,]) + 
   ggtitle("Prior Predictive Check: Are your priors too blurry?")
-
-
 
 # High-Definition Beta Model
 
 library(brms)
-### Clean column names to avoid back tick hell 
-colnames(datM)[colnames(datM) == "Avg Dist"] <- "avg_dist"
-colnames(datM)[colnames(datM) == "Drive Accuracy(%)"] <- "drive_accuracy_pct"
 
 # 2. Run the High-Definition Model with clean names
 fit_Betahd <- brm(
