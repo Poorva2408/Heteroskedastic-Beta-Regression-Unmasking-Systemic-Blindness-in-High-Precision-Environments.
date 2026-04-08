@@ -12,13 +12,20 @@ We identify a Black Swan event at the 285.5-yard coordinate: a golfer with 49% a
 * **Beta Distribution:** Essential for bounded accuracy proportions $(0, 1)$.
 * **Dynamic Precision ($\phi$):** Unlike "lazy" models that assume constant noise, our HD-Path models $\phi$ as a function of distance.
 * **Log-Normal Priors:** A stiff $\phi \sim \text{LogNormal}(5.3, 0.1)$ prior acts as a high-fidelity sensor, preventing the model from expanding its variance to "hide" errors.
+  
+<p align="center">
+  <img src="Forensic_Audit_285y_Breach.png" width="600" alt="Resized Chart Description">
+  <br>
+  <b>Figure 1:</b> System Evaluation
+</p>
+
 
 ### 3. The Forensic Resolution Audit
 Standard regression suffers from Systemic Blindness. By mapping the Precision Parameter ($\phi$) across the yardage gradient, we visualize the Resolution Deficit.
 <p align="center">
   <img src="SwanF.png" width="600" alt="Resized Chart Description">
   <br>
-  <b>Figure 1:</b> PGA Accuracy Model
+  <b>Figure 2:</b> PGA Accuracy Model
 </p>
 Visualizing the Precision Peak
 As seen in the Forensic Resolution Audit, the model identifies five distinct operational zones:
